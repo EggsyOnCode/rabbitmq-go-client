@@ -60,7 +60,7 @@ func main() {
 
 			g.Go(func() error {
 				fmt.Printf("msg is %s \n", msg.Body)
-				time.Sleep(10 * time.Second)
+				time.Sleep(5 * time.Second)
 				if err := msg.Ack(false); err != nil {
 					log.Printf("failed to ack teh msg")
 					return err

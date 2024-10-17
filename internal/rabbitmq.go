@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -21,6 +22,10 @@ func CreateRmqpConnection(username, pwd, host, vhost string) (*amqp.Connection, 
 func NewRabbitMQClient(conn *amqp.Connection) *RabbitMQClient {
 	ch, err := conn.Channel()
 	if err != nil {
+		panic(err)
+	}
+
+	if err := ch.Confirm(false); err != nil {
 		panic(err)
 	}
 
@@ -49,7 +54,7 @@ func (rc *RabbitMQClient) CreateBinding(queue_name, binding_key, exchange string
 
 // wrapper for publishing messages
 func (rc *RabbitMQClient) Send(ctx context.Context, exchange, routingKey string, options amqp.Publishing) error {
-	return rc.ch.PublishWithContext(ctx,
+	confirmation, err := rc.ch.PublishWithDeferredConfirmWithContext(ctx,
 		exchange,
 		routingKey,
 		// mandatory flag is for receiving an error if exchange encoutners a failure to send msg
@@ -57,6 +62,14 @@ func (rc *RabbitMQClient) Send(ctx context.Context, exchange, routingKey string,
 		false,
 		options,
 	)
+
+	if err != nil {
+		return err
+	}
+
+	confirmation.Wait()
+	log.Printf("confirmation received!")
+	return nil
 }
 
 // wrapper for consuming msgs
@@ -65,7 +78,7 @@ func (rc *RabbitMQClient) Consume(queue, consumer string, autoAck bool) (<-chan 
 		queue,
 		consumer,
 		// if the consuming microservice takes time to process the msgs and there's a possibiltiy of failure
-		// better manually ACK then set autoAck because autoAck removes msg from queue as soon as its delivered 
+		// better manually ACK then set autoAck because autoAck removes msg from queue as soon as its delivered
 		autoAck,
 		// exclusive flag should be set to true only if there's only one consumer consuming from the queue, otherwise its set to false
 		// and server will use load-balancing to distribute msgs
