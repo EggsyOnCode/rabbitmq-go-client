@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"time"
 
 	"github.com/EggysOnCode/event-driven-rmq/internal"
+	"github.com/rabbitmq/amqp091-go"
 )
 
 func main() {
@@ -19,7 +21,7 @@ func main() {
 	defer client.Close()
 
 	// creating a queue
-	if err = client.CreateQueue("customer_created", true, false); err!=nil {
+	if err = client.CreateQueue("customer_created", true, false); err != nil {
 		panic(err)
 	}
 	if err = client.CreateQueue("customer_logins", true, false); err != nil {
@@ -32,6 +34,27 @@ func main() {
 	}
 
 	if err = client.CreateBinding("customer_logins", "customers.*", "customer_events"); err != nil {
+		panic(err)
+	}
+
+	// creating bg ctx fro the msg payload
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := client.Send(ctx, "customer_events", "customers.created.pk", amqp091.Publishing{
+		ContentType:  "text/plain",
+		DeliveryMode: amqp091.Persistent,
+		Body:         []byte("a Persistent msg here guys!"),
+	}); err != nil {
+		panic(err)
+	}
+
+
+	if err := client.Send(ctx, "customer_events", "customers.logins", amqp091.Publishing{
+		ContentType:  "text/plain",
+		DeliveryMode: amqp091.Transient,
+		Body:         []byte("a Transient msg here guys!"),
+	}); err != nil {
 		panic(err)
 	}
 

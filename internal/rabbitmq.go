@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -45,3 +46,16 @@ func (rc *RabbitMQClient) CreateBinding(queue_name, binding_key, exchange string
 	// leaving noWait to false, which will return an error if the channle fails to bind
 	return rc.ch.QueueBind(queue_name, binding_key, exchange, false, nil)
 }
+
+// wrapper for publishing messages
+func (rc *RabbitMQClient) Send(ctx context.Context, exchange, routingKey string, options amqp.Publishing) error {
+	return rc.ch.PublishWithContext(ctx,
+		exchange,
+		routingKey,
+		// mandatory flag is for receiving an error if exchange encoutners a failure to send msg
+		true,
+		false,
+		options,
+	)
+}
+
