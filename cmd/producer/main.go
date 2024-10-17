@@ -41,6 +41,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// sending some msgs B!
 	if err := client.Send(ctx, "customer_events", "customers.created.pk", amqp091.Publishing{
 		ContentType:  "text/plain",
 		DeliveryMode: amqp091.Persistent,

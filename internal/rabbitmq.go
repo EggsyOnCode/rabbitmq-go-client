@@ -59,3 +59,19 @@ func (rc *RabbitMQClient) Send(ctx context.Context, exchange, routingKey string,
 	)
 }
 
+// wrapper for consuming msgs
+func (rc *RabbitMQClient) Consume(queue, consumer string, autoAck bool) (<-chan amqp.Delivery, error) {
+	return rc.ch.Consume(
+		queue,
+		consumer,
+		// if the consuming microservice takes time to process the msgs and there's a possibiltiy of failure
+		// better manually ACK then set autoAck because autoAck removes msg from queue as soon as its delivered 
+		autoAck,
+		// exclusive flag should be set to true only if there's only one consumer consuming from the queue, otherwise its set to false
+		// and server will use load-balancing to distribute msgs
+		false,
+		false,
+		false,
+		nil,
+	)
+}
