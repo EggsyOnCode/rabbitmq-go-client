@@ -41,9 +41,12 @@ func (rc *RabbitMQClient) Close() error {
 }
 
 // a wrapper method around amqp.Channel.QueueDeclare to avoid exposing the channel directly to the user
-func (rc *RabbitMQClient) CreateQueue(name string, durable, autodelete bool) error {
-	_, err := rc.ch.QueueDeclare(name, durable, autodelete, false, false, nil)
-	return err
+func (rc *RabbitMQClient) CreateQueue(name string, durable, autodelete bool) (amqp.Queue, error) {
+	q, err := rc.ch.QueueDeclare(name, durable, autodelete, false, false, nil)
+	if err!= nil {
+		return amqp.Queue{}, err
+	}
+	return q, err
 }
 
 // bind the queue with the specific binding key to an exchange
