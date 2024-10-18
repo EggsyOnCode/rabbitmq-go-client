@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/EggysOnCode/event-driven-rmq/internal"
+	"github.com/rabbitmq/amqp091-go"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -17,12 +18,20 @@ func main() {
 	}
 	defer conn.Close()
 
+	// another conn for producing callbacks
+	publishConn, err := internal.CreateRmqpConnection("xen", "secret", "localhost:5672", "customers")
+	if err != nil {
+		panic(err)
+	}
+	defer publishConn.Close()
+
 	// creating a client
 	client := internal.NewRabbitMQClient(conn)
 	defer client.Close()
 
-	client2 := internal.NewRabbitMQClient(conn)
-	defer client2.Close()
+	// creating a client
+	publishClient := internal.NewRabbitMQClient(conn)
+	defer publishClient.Close()
 
 	queue, err := client.CreateQueue("", true, true)
 	if err != nil {
@@ -31,30 +40,13 @@ func main() {
 
 	log.Printf("queue 1 is %s", queue.Name)
 
-	queue2, err := client2.CreateQueue("", true, true)
-	if err != nil {
-		panic(err)
-	}
-
-
-	log.Printf("queue 2 is %s", queue2.Name)
-
 	// Bind the queues to the excahnge
 	if err = client.CreateBinding(queue.Name, "", "customer_events"); err != nil {
 		panic(err)
 	}
 
-	if err = client2.CreateBinding(queue2.Name, "", "customer_events"); err != nil {
-		panic(err)
-	}
-
 	// start consuming
 	msgBus1, err := client.Consume(queue.Name, "consumer-1", false)
-	if err != nil {
-		panic(err)
-	}
-
-	msgBus2, err := client2.Consume(queue2.Name, "consumer-2", false)
 	if err != nil {
 		panic(err)
 	}
@@ -79,25 +71,18 @@ func main() {
 					log.Printf("failed to ack the msg")
 					return err
 				}
-				log.Printf("Ack msg %s", msg.MessageId)
 
-				return nil
-			})
-
-		}
-	}()
-
-	go func() {
-		for message := range msgBus2 {
-			msg := message
-
-			g.Go(func() error {
-				fmt.Printf("msg2 is %s \n", msg.Body)
-				time.Sleep(5 * time.Second)
-				if err := msg.Ack(false); err != nil {
-					log.Printf("failed to ack the msg")
+				// sending to callaback queue
+				if err := publishClient.Send(ctx, "customer_callbacks", msg.ReplyTo, amqp091.Publishing{
+					Body:          []byte(fmt.Sprintf("Received msg: %s wit coorelation Id %v", string(msg.Body), msg.CorrelationId)),
+					CorrelationId: msg.CorrelationId,
+					DeliveryMode:  amqp091.Persistent,
+					ContentType:   "text/plain",
+				}); err != nil {
+					log.Printf("failed to send msg to callback queue")
 					return err
 				}
+
 				log.Printf("Ack msg %s", msg.MessageId)
 
 				return nil
