@@ -2,8 +2,11 @@ package internal
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log"
+	"os"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -15,8 +18,30 @@ type RabbitMQClient struct {
 	ch *amqp.Channel
 }
 
-func CreateRmqpConnection(username, pwd, host, vhost string) (*amqp.Connection, error) {
-	return amqp.Dial(fmt.Sprintf("amqp://%s:%s@%s/%s", username, pwd, host, vhost))
+func CreateRmqpConnection(username, password, host, vhost, caCert, clientCert, clientKey string) (*amqp.Connection, error) {
+	ca, err := os.ReadFile(caCert)
+	if err != nil {
+		return nil, err
+	}
+	// Load the key pair
+	cert, err := tls.LoadX509KeyPair(clientCert, clientKey)
+	if err != nil {
+		return nil, err
+	}
+	// Add the CA to the cert pool
+	rootCAs := x509.NewCertPool()
+	rootCAs.AppendCertsFromPEM(ca)
+
+	tlsConf := &tls.Config{
+		RootCAs:      rootCAs,
+		Certificates: []tls.Certificate{cert},
+	}
+	// Setup the Connection to RabbitMQ host using AMQPs and Apply TLS config
+	conn, err := amqp.DialTLS(fmt.Sprintf("amqps://%s:%s@%s/%s", username, password, host, vhost), tlsConf)
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
 }
 
 func NewRabbitMQClient(conn *amqp.Connection) *RabbitMQClient {
@@ -43,7 +68,7 @@ func (rc *RabbitMQClient) Close() error {
 // a wrapper method around amqp.Channel.QueueDeclare to avoid exposing the channel directly to the user
 func (rc *RabbitMQClient) CreateQueue(name string, durable, autodelete bool) (amqp.Queue, error) {
 	q, err := rc.ch.QueueDeclare(name, durable, autodelete, false, false, nil)
-	if err!= nil {
+	if err != nil {
 		return amqp.Queue{}, err
 	}
 	return q, err
@@ -90,4 +115,12 @@ func (rc *RabbitMQClient) Consume(queue, consumer string, autoAck bool) (<-chan 
 		false,
 		nil,
 	)
+}
+
+// wrapper for QoS (Quality of Service) -- to avoid server form spamming consumers with unACK msgs
+// prefetch count - an int on how many UNACK msg server can send
+// prefetch size - an int of how many bytes of UNACK msg server can send
+// global - a bool to set the QoS on the channel or the connection
+func (rc *RabbitMQClient) ApplyQoS(count, size int, global bool) error {
+	return rc.ch.Qos(count, size, global)
 }

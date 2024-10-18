@@ -11,7 +11,11 @@ import (
 )
 
 func main() {
-	conn, err := internal.CreateRmqpConnection("xen", "secret", "localhost:5672", "customers")
+	conn, err := internal.CreateRmqpConnection("xen", "secret", "localhost:5671", "customers",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/ca_certificate.pem",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/client_xen-333_certificate.pem",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/client_xen-333_key.pem",
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -19,7 +23,11 @@ func main() {
 
 	// cretaing another conn for consuming callbacks
 
-	consumeCallback, err := internal.CreateRmqpConnection("xen", "secret", "localhost:5672", "customers")
+	consumeCallback, err := internal.CreateRmqpConnection("xen", "secret", "localhost:5671", "customers",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/ca_certificate.pem",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/client_xen-333_certificate.pem",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/client_xen-333_key.pem",
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -34,23 +42,6 @@ func main() {
 	defer consumeClient.Close()
 
 	log.Printf("Producer running....")
-
-	// // creating a queue
-	// if err = client.CreateQueue("customer_created", true, false); err != nil {
-	// 	panic(err)
-	// }
-	// if err = client.CreateQueue("customer_logins", true, false); err != nil {
-	// 	panic(err)
-	// }
-
-	// // creating a binding
-	// if err = client.CreateBinding("customer_created", "customers.created.*", "customer_events"); err != nil {
-	// 	panic(err)
-	// }
-
-	// if err = client.CreateBinding("customer_logins", "customers.*", "customer_events"); err != nil {
-	// 	panic(err)
-	// }
 
 	// create a queue for receiving the callabck responses
 	queue, err := consumeClient.CreateQueue("", true, true)
@@ -72,8 +63,19 @@ func main() {
 
 		for msg := range msgBus {
 			log.Printf("Received msg: %s wit coorelation Id %v", string(msg.Body), msg.CorrelationId)
+
+			// Acknowledge the message
+			if err := msg.Ack(false); err != nil {
+				log.Printf("failed to ack the msg")
+			}
 		}
 	}()
+
+	// apply QOS
+	// server can only send out 10 unack msg at a time
+	if err := client.ApplyQoS(10, 0, true); err != nil {
+		panic(err)
+	}
 
 	// creating bg ctx fro the msg payload
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -85,7 +87,7 @@ func main() {
 			ContentType:  "text/plain",
 			DeliveryMode: amqp091.Persistent,
 			// reply To is teh queue where the server will send back the response callbacks
-			ReplyTo:       queue.Name,
+			ReplyTo: queue.Name,
 			// correlation id is used to match the response to the request ; a unique ID
 			CorrelationId: fmt.Sprintf("correlation-id-%d", i),
 			Body:          []byte("Persistent msg"),

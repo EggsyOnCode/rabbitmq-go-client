@@ -12,14 +12,22 @@ import (
 )
 
 func main() {
-	conn, err := internal.CreateRmqpConnection("xen", "secret", "localhost:5672", "customers")
+	conn, err := internal.CreateRmqpConnection("xen", "secret", "localhost:5671", "customers",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/ca_certificate.pem",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/client_xen-333_certificate.pem",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/client_xen-333_key.pem",
+	)
 	if err != nil {
 		panic(err)
 	}
 	defer conn.Close()
 
 	// another conn for producing callbacks
-	publishConn, err := internal.CreateRmqpConnection("xen", "secret", "localhost:5672", "customers")
+	publishConn, err := internal.CreateRmqpConnection("xen", "secret", "localhost:5671", "customers",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/ca_certificate.pem",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/client_xen-333_certificate.pem",
+		"/home/xen/Desktop/code/event_driven/event-driven-rmq/tls-gen/basic/result/client_xen-333_key.pem",
+	)
 	if err != nil {
 		panic(err)
 	}
